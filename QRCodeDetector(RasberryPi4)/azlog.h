@@ -69,9 +69,8 @@ typedef struct current_t
 // 로그 항목 정의 구조체
 typedef struct Entry
 {
-    std::string serverId;    // 서버 ID
-    int uuid;                // UUID
-    std::uint64_t timestamp; // 타임스탬프
+    std::string serverId; // 서버 ID
+    int uuid;             // UUID
 } Entry;
 
 // 스캔 결과 정의 구조체

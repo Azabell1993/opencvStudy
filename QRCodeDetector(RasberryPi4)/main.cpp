@@ -15,7 +15,7 @@ int main()
         std::vector<ScanResult> scanResults;
         ScanResult result;
         result.hubId = "Hub_1234";
-        result.logList.push_back({"Server_1", 12345, 1673968254});
+        result.logList.push_back({"Server_1", 12345});
         scanResults.push_back(result);
 
         // BLE 서비스 초기화
