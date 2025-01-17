@@ -153,12 +153,9 @@ static inline int az_chrpos(const char *str, int cnt)
 }
 
 // 지정된 문자로 채우는 함수
-static inline void az_fill(int fillcnt, char cnt)
+std::string az_fill(int fillcnt, char cnt)
 {
-    for (int i = 0; i <= fillcnt; i++)
-    {
-        putchar(cnt);
-    }
+    return std::string(fillcnt, cnt); // 문자열로 반환
 }
 
 // 숫자를 출력하는 함수
@@ -177,29 +174,35 @@ static inline void az_putnbr(int n)
 }
 
 // '+' 플래그에 따른 출력 처리 함수
-static inline void az_plusflag(int d, char flag, int param, const char *format)
+static inline std::string az_plusflag(int d, char flag, int param, const char *format)
 {
-    int width = param - az_nbrlen(d);
+    std::ostringstream result;
+    int width = param - az_nbrlen(d); // 전체 너비에서 숫자 길이 차감
     int flag_pos = az_chrpos(format, flag);
-    char add_flag = format[flag_pos + 1];
-    char add_flag_val = format[flag_pos + 2];
+    char add_flag = (flag_pos != -1) ? format[flag_pos + 1] : '\0';
+    char add_flag_val = (flag_pos != -1 && format[flag_pos + 2]) ? format[flag_pos + 2] : '\0';
 
     if (flag == '+' && add_flag != '0')
     {
         if (width > 0)
-            az_fill(width, ' '); // 빈칸 채움
+            result << az_fill(width, ' '); // 빈칸으로 채움
         if (d > 0)
-            putchar('+'); // 양수이면 '+' 출력
-        az_putnbr(d);     // 숫자 출력
+            result << "+"; // 양수일 경우 '+' 추가
+        result << d;       // 숫자 추가
     }
     else if (flag == '+' && add_flag == '0')
     {
-        d = -d;       // 음수로 변환
-        putchar('-'); // '-' 출력
-        if (add_flag_val != '1')
-            putchar('0'); // '0' 출력
-        az_putnbr(d);     // 숫자 출력
+        if (d < 0)
+        {
+            result << "-";
+            d = -d; // 음수 처리
+        }
+        if (width > 0)
+            result << az_fill(width, '0'); // '0'으로 채움
+        result << d;                       // 숫자 추가
     }
+
+    return result.str();
 }
 
 // 디렉토리 확인 및 생성 함수
@@ -318,11 +321,16 @@ static inline void COUT_(std::string log_level, std::string function, int line, 
             rowBuilder << " [ScanResults: ";
             for (const auto &result : scanResults)
             {
-                rowBuilder << "HubId=" << result.hubId << ", Logs=" << result.logList.size() << "; ";
+                rowBuilder << "HubId=" << result.hubId << ". Logs=";
+                for (const auto &entry : result.logList)
+                {
+                    // az_plusflag 결과를 rowBuilder에 추가
+                    rowBuilder << az_plusflag(entry.uuid, '+', 6, "%+06d") << " ";
+                }
+                rowBuilder << "; ";
             }
             rowBuilder << "]";
         }
-
         rowBuilder << "\n";
 
         // 콘솔 출력
