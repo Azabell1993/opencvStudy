@@ -9,6 +9,7 @@ fi
 # Create the 'build' directory and navigate into it
 echo "Creating build directory..."
 mkdir build 
+cp sample.jpg build
 cd build
 
 # Run CMake and Make

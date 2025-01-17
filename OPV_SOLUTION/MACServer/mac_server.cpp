@@ -114,7 +114,7 @@ private:
             }
 
             // 이미지를 파일로 저장
-            std::string outputFilename = "received_image.jpg";
+            std::string outputFilename = "received_image.png";
             cv::imwrite(outputFilename, receivedImage);
             std::cout << "Image saved to " << outputFilename << std::endl;
 
