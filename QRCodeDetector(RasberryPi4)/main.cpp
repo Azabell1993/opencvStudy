@@ -3,15 +3,17 @@
 #include <string>
 #include "azlog.h"
 #include "edge_ble.h"
+#include "scan_result.h"
 
 int main()
 {
     try
     {
         // 서버 IP와 포트를 설정
-        std::string server_ip = "192.168.0.37"; // 맥 서버의 IP
-        unsigned short server_port = 12345;     // 맥 서버의 포트
+        std::string server_ip = "192.168.0.37"; // 서버 IP
+        unsigned short server_port = 12345;     // 서버 포트
 
+        // Declare and initialize scanResults
         std::vector<ScanResult> scanResults;
         ScanResult result;
         result.hubId = "Hub_1234";
@@ -19,17 +21,24 @@ int main()
         scanResults.push_back(result);
 
         // BLE 서비스 초기화
-        AZLOGDI("BLE 서비스 초기화 중: 서버 IP=%s, 포트=%d", "info_log.txt", scanResults, server_ip.c_str(), server_port);
         auto bleService = std::make_shared<EdgeBLE>(server_ip, server_port);
 
-        // 스캔 시작
+        // Set scan results
+        bleService->setScanResults(scanResults);
+
+        // Logging after scanResults initialization
+        AZLOGDI("BLE 서비스 초기화 중: 서버 IP=%s, 포트=%d", "info_log.txt", scanResults, server_ip.c_str(), server_port);
+
+        // 스캔 시작 로그 출력
         AZLOGDI("BLE 스캔 시작.", "info_log.txt", scanResults);
+
+        // Start scanning
         bleService->startScanning();
 
         std::cout << "Press Enter to stop scanning..." << std::endl;
         std::cin.get();
 
-        // 스캔 중지
+        // Stop scanning
         AZLOGDI("BLE 스캔 중지.", "info_log.txt", scanResults);
         bleService->stopScanning();
 

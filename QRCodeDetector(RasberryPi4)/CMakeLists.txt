@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 # OpenCV configuration
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
+include_directories(${CMAKE_SOURCE_DIR})
 
 # Boost configuration
 find_package(Boost REQUIRED COMPONENTS system)

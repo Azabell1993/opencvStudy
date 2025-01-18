@@ -17,6 +17,7 @@
 #include <vector>        // 벡터 사용
 #include <unordered_set> // 중복 제거를 위한 집합 사용
 #include <sys/stat.h>    // 디렉토리 생성 및 확인용 헤더
+#include "scan_result.h"
 
 #define MAX_ENAME 133                                               // errno 배열의 최대 크기 정의
 #define RESOURCE_PATH "/home/azabell/Desktop/QRCodeDetector/output" // 리소스 경로 정의
@@ -183,20 +184,6 @@ typedef struct current_t
     int second; // 초
 } CURRENT_T;
 
-// 로그 항목 정의 구조체
-typedef struct Entry
-{
-    std::string serverId; // 서버 ID
-    int uuid;             // UUID
-} Entry;
-
-// 스캔 결과 정의 구조체
-typedef struct ScanResult
-{
-    std::string hubId;          // 허브 ID
-    std::vector<Entry> logList; // 로그 목록
-} ScanResult;
-
 // 현재 시간을 가져오는 함수
 static inline void getCurrentTime(CURRENT_T *current)
 {
@@ -255,7 +242,7 @@ static inline int az_chrpos(const char *str, int cnt)
 }
 
 // 지정된 문자로 채우는 함수
-std::string az_fill(int fillcnt, char cnt)
+static inline std::string az_fill(int fillcnt, char cnt)
 {
     return std::string(fillcnt, cnt); // 문자열로 반환
 }

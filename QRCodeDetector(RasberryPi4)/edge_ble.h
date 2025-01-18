@@ -3,12 +3,13 @@
 
 #include <iostream>
 #include <memory>
-#include <boost/asio.hpp>
 #include <thread>
 #include <mutex>
 #include <vector>
 #include <chrono>
-#include <functional>
+#include <string>
+#include <thread>
+#include "scan_result.h"
 
 class EdgeBLE
 {
@@ -16,15 +17,16 @@ public:
     EdgeBLE(const std::string &server_ip, unsigned short server_port);
     void startScanning();
     void stopScanning();
+    void setScanResults(const std::vector<ScanResult> &results);
 
 private:
     void scanBLEDevices();
-    void processBLEData(const std::string &data);
     void sendImageToServer();
 
     bool running;
     std::shared_ptr<std::thread> scanningThread;
     std::mutex bleMutex;
+    std::vector<ScanResult> scanResults;
 
     std::string server_ip_;
     unsigned short server_port_;
