@@ -60,8 +60,6 @@ void EdgeBLE::sendImageToServer()
         return;
     }
 
-    AZLOGDI("Preparing to send scan results. Size: %d", "debug_log.txt", scanResults, scanResults.size());
-
     try
     {
         boost::asio::io_context io_context;
@@ -72,39 +70,32 @@ void EdgeBLE::sendImageToServer()
         auto socket = std::make_shared<tcp::socket>(io_context);
         boost::asio::connect(*socket, endpoints);
 
-        // sample.jpg 파일 읽기
-        // cv::Mat image = cv::imread("sample.jpg", cv::IMREAD_COLOR);
         cv::Mat image = cv::imread("sample.jpg", cv::IMREAD_GRAYSCALE);
         if (image.empty())
         {
-            // std::cerr << "Failed to load image from sample.jpg" << std::endl;
             AZLOGDE("Failed to load image from sample.jpg", "error_log.txt", scanResults);
+            std::cerr << "Failed to load image from sample.jpg" << std::endl;
             return;
         }
 
         cv::Mat dst = image + 100;
-        // 동기화된 scanResults 접근
-        {
-            std::lock_guard<std::mutex> lock(bleMutex);
-            AZLOGDI("Sending image after pixel adjustment.", "info_log.txt", scanResults);
-        }
-
-        // 이미지를 png로 인코딩
         std::vector<uchar> buffer;
         cv::imencode(".png", dst, buffer);
         std::string image_data(buffer.begin(), buffer.end());
 
-        // 이미지 데이터 크기를 먼저 전송
         uint32_t data_size = static_cast<uint32_t>(image_data.size());
-        boost::asio::write(*socket, boost::asio::buffer(&data_size, sizeof(data_size)));
+        uint32_t data_size_network_order = htonl(data_size);
 
-        // 이미지 데이터 전송
+        AZLOGDI("Sending image size: %d bytes", "debug_log.txt", scanResults, data_size);
+
+        boost::asio::write(*socket, boost::asio::buffer(&data_size_network_order, sizeof(data_size_network_order)));
         boost::asio::write(*socket, boost::asio::buffer(image_data));
-        std::cout << "Image sent to server: " << server_ip_ << ":" << server_port_ << std::endl;
+
+        AZLOGDI("Image sent successfully.", "debug_log.txt", scanResults);
     }
     catch (const std::exception &e)
     {
-        AZLOGDE("Error sending image: %s", "error_log.txt", scanResults, e.what());
-        std::cerr << "Error sending image: " << e.what() << std::endl;
+        AZLOGDE("Error in sendImageToServer: %s", "error_log.txt", scanResults, e.what());
+        std::cerr << "Error in sendImageToServer: " << e.what() << std::endl;
     }
 }

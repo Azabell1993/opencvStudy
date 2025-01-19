@@ -49,22 +49,30 @@ private:
     {
         try
         {
-            // 데이터 크기 읽기
-            uint32_t data_size = 0;
-            boost::asio::read(*socket, boost::asio::buffer(&data_size, sizeof(data_size)));
+            uint32_t data_size_network_order = 0;
+            boost::asio::read(*socket, boost::asio::buffer(&data_size_network_order, sizeof(data_size_network_order)));
+            uint32_t data_size = ntohl(data_size_network_order);
 
             std::cout << "Expected data size: " << data_size << " bytes" << std::endl;
 
-            // 데이터 크기만큼 버퍼 생성 및 읽기
+            if (data_size == 0)
+            {
+                std::cerr << "Error: Received data size is zero. Client may not have sent data." << std::endl;
+                return;
+            }
+
             std::vector<char> image_buffer(data_size);
-            boost::asio::read(*socket, boost::asio::buffer(image_buffer.data(), data_size));
+            size_t total_read = 0;
+            while (total_read < data_size)
+            {
+                size_t bytes_read = boost::asio::read(*socket, boost::asio::buffer(image_buffer.data() + total_read, data_size - total_read));
+                total_read += bytes_read;
+                std::cout << "Read " << bytes_read << " bytes, total: " << total_read << "/" << data_size << " bytes" << std::endl;
+            }
 
-            std::cout << "Received " << data_size << " bytes of image data." << std::endl;
+            std::cout << "Received " << total_read << " bytes of image data." << std::endl;
 
-            // OpenCV로 데이터 처리
             processImage(std::string(image_buffer.begin(), image_buffer.end()));
-
-            // 응답 전송
             sendResponse(socket, "Acknowledged");
         }
         catch (const std::exception &e)
