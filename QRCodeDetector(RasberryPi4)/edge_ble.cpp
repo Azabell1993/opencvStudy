@@ -1,7 +1,7 @@
+#include <opencv2/opencv.hpp>
 #include "edge_ble.h"
 #include "azlog.h"
 #include <boost/asio.hpp>
-#include <opencv2/opencv.hpp>
 #include "scan_result.h"
 #include <fstream>
 
@@ -50,6 +50,185 @@ void EdgeBLE::setScanResults(const std::vector<ScanResult> &results)
     }
 }
 
+cv::Mat EdgeBLE::calcGrayHist(const cv::Mat &img)
+{
+    CV_Assert(img.type() == CV_8UC1);
+
+    cv::Mat hist;
+    int channels[] = {0};
+    int dims = 1;
+    const int histSize[] = {256};
+    float graylevel[] = {0, 256};
+    const float *ranges[] = {graylevel};
+
+    cv::calcHist(&img, 1, channels, cv::noArray(), hist, dims, histSize, ranges);
+
+    return hist;
+}
+
+cv::Mat EdgeBLE::getGrayHistImage(const cv::Mat &hist)
+{
+    CV_Assert(hist.type() == CV_32FC1);
+    CV_Assert(hist.size() == cv::Size(1, 256));
+
+    double histMax;
+    minMaxLoc(hist, 0, &histMax);
+
+    cv::Mat imgHist(100, 256, CV_8UC1, cv::Scalar(255));
+    for (int i = 0; i < 256; i++)
+    {
+        cv::line(imgHist, cv::Point(i, 100),
+                 cv::Point(i, 100 - cvRound(hist.at<float>(i, 0) * 100 / histMax)),
+                 cv::Scalar(0));
+    }
+
+    return imgHist;
+}
+
+cv::Mat EdgeBLE::filter_embossing(const cv::Mat &img)
+{
+    if (img.empty())
+    {
+        AZLOGDE("Failed to load image from sample.jpg", "error_log.txt", scanResults);
+        std::cerr << "Failed to load image from sample.jpg" << std::endl;
+    }
+
+    float data[] = {-1, -1, 0, -1, 0, 1, 0, 1, 1};
+    cv::Mat emboss(3, 3, CV_32FC1, data);
+
+    cv::Mat dst;
+    filter2D(img, dst, -1, emboss, cv::Point(-1, -1), 128);
+
+    return dst;
+}
+
+cv::Mat EdgeBLE::blurring_mean(const cv::Mat &img)
+{
+    if (img.empty())
+    {
+        AZLOGDE("Failed to load image from sample.jpg", "error_log.txt", scanResults);
+        std::cerr << "Failed to load image from sample.jpg" << std::endl;
+    }
+
+    cv::Mat dst;
+    for (int ksize = 3; ksize <= 7; ksize += 2)
+    {
+        blur(img, dst, cv::Size(ksize, ksize));
+
+        cv::String desc = cv::format("Mean: %dx%d", ksize, ksize);
+        putText(dst, desc, cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255), 1, cv::LINE_AA);
+    }
+
+    return dst;
+}
+
+cv::Mat EdgeBLE::blurring_affine_Transform(const cv::Mat &img)
+{
+    if (img.empty())
+    {
+        AZLOGDE("Failed to load image from sample.jpg", "error_log.txt", scanResults);
+        std::cerr << "Failed to load image from sample.jpg" << std::endl;
+        return cv::Mat(); // 비어있는 Mat 반환
+    }
+
+    // 원본 및 변환 좌표 설정
+    cv::Point2f srcPts[3] = {
+        cv::Point2f(0, 0),
+        cv::Point2f(img.cols - 1, 0),
+        cv::Point2f(img.cols - 1, img.rows - 1)};
+    cv::Point2f dstPts[3] = {
+        cv::Point2f(0, 0),
+        cv::Point2f(img.cols - 1, 0),
+        cv::Point2f(img.cols - 50, img.rows - 50)}; // 변환을 더 명확하게 하기 위해 x 좌표도 이동
+
+    // 변환 행렬 계산
+    cv::Mat M = getAffineTransform(srcPts, dstPts);
+
+    // 행렬 출력 (디버깅용)
+    std::cout << "Affine Transform Matrix:\n"
+              << M << std::endl;
+
+    // 블러링 적용
+    cv::Mat blurred;
+    blur(img, blurred, cv::Size(7, 7)); // 블러링 커널 크기 7x7
+
+    // 어파인 변환 수행
+    cv::Mat dst;
+    warpAffine(blurred, dst, M, img.size()); // img.size()로 출력 이미지 크기 지정
+
+    // 변환된 이미지 저장 (디버깅용)
+    cv::imwrite("affine_transformed_image.jpg", dst);
+
+    // 결과 반환
+    return dst;
+}
+
+// 정적 멤버 변수 초기화
+std::vector<cv::Point2f> EdgeBLE::selectedPoints;
+
+cv::Mat EdgeBLE::event_lbuttondown(const cv::Mat &img)
+{
+    if (img.empty())
+    {
+        std::cerr << "Input image is empty!" << std::endl;
+        return cv::Mat();
+    }
+
+    // // 마우스 이벤트 처리를 위한 창 생성
+    cv::namedWindow("Select Points");
+    cv::setMouseCallback("Select Points", EdgeBLE::onMouse, (void *)&img);
+    std::cout << "이미지에서 투시 변환을 위한 4개의 점을 클릭하세요." << std::endl;
+
+    cv::imshow("Select Points", img);
+    while (selectedPoints.size() < 4)
+    {
+        cv::waitKey(1);
+    }
+
+    // std::cout << "이미지에서 투시 변환을 위한 4개의 점을 입력하세요 (x, y 순서로 4개):" << std::endl;
+    // std::vector<cv::Point2f> selectedPoints(4);
+    // for (int i = 0; i < 4; ++i)
+    // {
+    //     std::cout << "Point " << i + 1 << ": ";
+    //     std::cin >> selectedPoints[i].x >> selectedPoints[i].y;
+    // }
+
+    // 투시 변환 후의 목적지 좌표
+    std::vector<cv::Point2f> dstPoints = {
+        cv::Point2f(0, 0),
+        cv::Point2f(img.cols - 1, 0),
+        cv::Point2f(img.cols - 1, img.rows - 1),
+        cv::Point2f(0, img.rows - 1)};
+
+    // 투시 변환 행렬 계산
+    cv::Mat perspectiveMatrix = cv::getPerspectiveTransform(selectedPoints, dstPoints);
+
+    // 투시 변환 적용
+    cv::Mat transformed;
+    cv::warpPerspective(img, transformed, perspectiveMatrix, img.size());
+
+    cv::destroyAllWindows(); // 창 닫기
+    // cv::imwrite("transformed_image.jpg",transtormed);
+
+    return transformed;
+}
+
+void EdgeBLE::onMouse(int event, int x, int y, int flags, void *userdata)
+{
+    if (event == cv::EVENT_LBUTTONDOWN)
+    {
+        if (selectedPoints.size() < 4)
+        {
+            selectedPoints.emplace_back(cv::Point2f(x, y));
+            std::cout << "Point selected: (" << x << ", " << y << ")" << std::endl;
+
+            cv::Mat *img = static_cast<cv::Mat *>(userdata);
+            cv::circle(*img, cv::Point(x, y), 5, cv::Scalar(0, 0, 255), -1);
+            cv::imshow("Select Points", *img);
+        }
+    }
+}
+
 void EdgeBLE::sendImageToServer()
 {
     std::lock_guard<std::mutex> lock(bleMutex);
@@ -70,7 +249,7 @@ void EdgeBLE::sendImageToServer()
         auto socket = std::make_shared<tcp::socket>(io_context);
         boost::asio::connect(*socket, endpoints);
 
-        cv::Mat image = cv::imread("sample.jpg", cv::IMREAD_GRAYSCALE);
+        cv::Mat image = cv::imread("sample2.jpg", cv::IMREAD_GRAYSCALE);
         if (image.empty())
         {
             AZLOGDE("Failed to load image from sample.jpg", "error_log.txt", scanResults);
@@ -78,9 +257,19 @@ void EdgeBLE::sendImageToServer()
             return;
         }
 
-        cv::Mat dst = image + 100;
+        EdgeBLE edge;
+        cv::Mat transformedImage = edge.event_lbuttondown(image);
+
+        if (transformedImage.empty())
+        {
+            std::cerr << "Transformed image is empty!" << std::endl;
+            return;
+        }
+
         std::vector<uchar> buffer;
-        cv::imencode(".png", dst, buffer);
+        // cv::imencode(".png", filter_embossing(image), buffer);
+        // cv::imencode(".png", blurring_affine_Transform(image), buffer);
+        cv::imencode(".png", transformedImage, buffer);
         std::string image_data(buffer.begin(), buffer.end());
 
         uint32_t data_size = static_cast<uint32_t>(image_data.size());
