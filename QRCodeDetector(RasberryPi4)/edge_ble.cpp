@@ -273,11 +273,20 @@ void EdgeBLE::sendImageToServer()
         cv::imencode(".png", transformedImage, buffer);
         std::string image_data(buffer.begin(), buffer.end());
 
-        uint32_t data_size = static_cast<uint32_t>(image_data.size());
+        // 이미지 데이터를 네트워크로 전송하기 위해 먼저 데이터 크기를 계산
+        uint32_t data_size = static_cast<uint32_t>(image_data.size());  // image_data.size()는 std::string 타입의 크기를 반환하며, 전송할 데이터의 총 바이트 수를 나타냄.
+        
+        // 데이터 크기를 네트워크 바이트 오더(빅 엔디언)로 변환
+        // 네트워크 바이트 오더 → 호스트 바이트 오더로 변환
+        // 네트워크 통신 표준상 데이터를 송수신할 때 항상 빅 엔디언을 사용하도록 규정됨
+        // 인터넷 프로토콜(IP), TCP, UDP 등의 프로토콜이 정의된 RFC1700과 같은 표준 문서에 명시되어있음.
+        // 빅 엔디언 : Most Significant Byte, MSB부터 순서대로 정렬한다.
+        // 좌측에서 우측으로 가는 순서와 유사하여 직관적(0x12345678 -> [12][34][56][78]
         uint32_t data_size_network_order = htonl(data_size);
 
         AZLOGDI("Sending image size: %d bytes", "debug_log.txt", scanResults, data_size);
 
+        // 변환된 데이터 크기를 네트워크 소켓으로 전송
         boost::asio::write(*socket, boost::asio::buffer(&data_size_network_order, sizeof(data_size_network_order)));
         boost::asio::write(*socket, boost::asio::buffer(image_data));
 

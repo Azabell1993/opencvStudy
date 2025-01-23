@@ -55,6 +55,8 @@ private:
             uint32_t data_size_network_order = 0;
             // 비동기적으로 소켓에서 데이터를 읽어옴(데이터의 크기를 네트워크 바이트 오더로 수신 후 이를 변환)
             boost::asio::read(*socket, boost::asio::buffer(&data_size_network_order, sizeof(data_size_network_order)));
+            
+            // ntohl: 네트워크 바이트 오더에서 호스트 바이트 오더로 변환 (빅 엔디언)
             uint32_t data_size = ntohl(data_size_network_order);
 
             std::cout << "Expected data size: " << data_size << " bytes" << std::endl;
