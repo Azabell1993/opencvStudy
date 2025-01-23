@@ -11,6 +11,8 @@ using boost::asio::ip::tcp;
 class Server
 {
 public:
+    // Server 객체가 생성되면서 io_context_ 객체도 생성
+    // tcp::endpoint(tcp::v4(), port) : TCP 프로토콜을 사용하여 IPv4 주소의 port번호에 바인딩하는 endpoint를 생성
     explicit Server(unsigned short port) : acceptor_(io_context_, tcp::endpoint(tcp::v4(), port)) {}
 
     void start()
@@ -34,6 +36,7 @@ private:
     void acceptConnection()
     {
         auto socket = std::make_shared<tcp::socket>(io_context_);
+        // 비동기적으로 소켓 연결을 수락함
         acceptor_.async_accept(*socket, [this, socket](const boost::system::error_code &ec)
                                {
                                    if (!ec)
@@ -50,6 +53,7 @@ private:
         try
         {
             uint32_t data_size_network_order = 0;
+            // 비동기적으로 소켓에서 데이터를 읽어옴(데이터의 크기를 네트워크 바이트 오더로 수신 후 이를 변환)
             boost::asio::read(*socket, boost::asio::buffer(&data_size_network_order, sizeof(data_size_network_order)));
             uint32_t data_size = ntohl(data_size_network_order);
 
@@ -81,9 +85,9 @@ private:
         }
     }
 
-    void
-    sendResponse(const std::shared_ptr<tcp::socket> &socket, const std::string &message)
+    void sendResponse(const std::shared_ptr<tcp::socket> &socket, const std::string &message)
     {
+        // 비동기적으로 소켓에 데이터를 전송
         boost::asio::async_write(*socket, boost::asio::buffer(message), [socket](const boost::system::error_code &ec, std::size_t)
                                  {
             if (!ec) {
@@ -141,7 +145,10 @@ private:
         }
     }
 
+    // io_context_: I/O 작업을 위한 컨텍스트 객체. Boost.Asio 라이브러리에서 비동기 I/O 작업을 수행하기 위한 핵심 객체
     boost::asio::io_context io_context_;
+    
+    // 생성된 엔드포인트에서 들어오는 연결 요청을 수락하는 역할
     tcp::acceptor acceptor_;
 };
 

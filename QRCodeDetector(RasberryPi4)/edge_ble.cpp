@@ -241,13 +241,14 @@ void EdgeBLE::sendImageToServer()
 
     try
     {
-        boost::asio::io_context io_context;
+        // Boost.Asio는 쓰레드와 명시적 Locking을 기반으로 한 동시성 모델의 사용을 프로그램에게 요구하지 않으면서 느린 I/O operation을 관리하는 도구를 제공.
+        boost::asio::io_context io_context; // 비동기 작업의 실행을 조정하는 핵심 객체(하단 resolver를 통해 서버 주소와 포트를 조회)
 
-        // 서버 주소 및 포트 설정
-        tcp::resolver resolver(io_context);
-        auto endpoints = resolver.resolve(server_ip_, std::to_string(server_port_));
+        // 서버 주소 및 포트 설정(resolver- 호스트이름 확인, 리졸버)
+        tcp::resolver resolver(io_context); // DNS 조회를 통해 호스트 이름을 IP 주소로 변환하는 역할 수행
+        auto endpoints = resolver.resolve(server_ip_, std::to_string(server_port_));    // 조회되고 난 이후에는 endpoint
         auto socket = std::make_shared<tcp::socket>(io_context);
-        boost::asio::connect(*socket, endpoints);
+        boost::asio::connect(*socket, endpoints);   // 순서대로 각 endpoints에 연결하여 socket 연결을 수립
 
         cv::Mat image = cv::imread("sample2.jpg", cv::IMREAD_GRAYSCALE);
         if (image.empty())
