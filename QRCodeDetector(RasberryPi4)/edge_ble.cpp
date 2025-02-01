@@ -4,6 +4,7 @@
 #include <boost/asio.hpp>
 #include "scan_result.h"
 #include <fstream>
+#include <vector>
 
 using boost::asio::ip::tcp;
 
@@ -166,6 +167,7 @@ cv::Mat EdgeBLE::blurring_affine_Transform(const cv::Mat &img)
 // 정적 멤버 변수 초기화
 std::vector<cv::Point2f> EdgeBLE::selectedPoints;
 
+// 4개의 점을 찍고 송신
 cv::Mat EdgeBLE::event_lbuttondown(const cv::Mat &img)
 {
     if (img.empty())
@@ -174,7 +176,7 @@ cv::Mat EdgeBLE::event_lbuttondown(const cv::Mat &img)
         return cv::Mat();
     }
 
-    // // 마우스 이벤트 처리를 위한 창 생성
+    // 마우스 이벤트 처리를 위한 창 생성
     cv::namedWindow("Select Points");
     cv::setMouseCallback("Select Points", EdgeBLE::onMouse, (void *)&img);
     std::cout << "이미지에서 투시 변환을 위한 4개의 점을 클릭하세요." << std::endl;
@@ -213,6 +215,74 @@ cv::Mat EdgeBLE::event_lbuttondown(const cv::Mat &img)
     return transformed;
 }
 
+cv::Mat EdgeBLE::hough_lines(const cv::Mat &img)
+{
+    if(img.empty()) {
+        std::cerr << "Input image is empty!" << std::endl;
+        return cv::Mat();
+    }
+
+    cv::Mat edge;
+    Canny(img, edge, 50, 150);
+
+    std::vector<cv::Vec2f> lines;
+    cv::HoughLines(edge, lines, 1, CV_PI / 180, 250);
+
+    cv::Mat dst;
+    cv::cvtColor(edge, dst, cv::COLOR_GRAY2BGR);
+
+    for(size_t i=0; i<lines.size(); i++) {
+        float r = lines[i][0], t = lines[i][1];
+        double cos_t = cos(t), sin_t = sin(t);
+        double x0 = r*cos_t, y0 = r * sin_t;
+        double alpha = 1000;
+
+        cv::Point pt1(cvRound(x0 + alpha * (-sin_t)), cvRound(y0 + alpha * cos_t));
+        cv::Point pt2(cvRound(x0 - alpha * (-sin_t)), cvRound(y0 - alpha * cos_t));
+        line(dst, pt1, pt2, cv::Scalar(0, 0, 255), 2, cv::LINE_AA);
+    }
+
+    return dst;
+}
+
+cv::Mat EdgeBLE::hough_lines_optimized(const cv::Mat &img)
+{
+    if(img.empty()) {
+        std::cerr << "Input image is empty!" << std::endl;
+        return cv::Mat();
+    }
+
+    // Step 1: Noise reduction
+    cv::Mat blurred, edge;
+    cv::GaussianBlur(img, blurred, cv::Size(5, 5), 1.5);
+    cv::Canny(blurred, edge, 50, 150);
+
+    // Step 2: Hough Line Transform
+    std::vector<cv::Vec2f> lines;
+    cv::HoughLines(edge, lines, 1, CV_PI / 180, 450);
+
+    cv::Mat dst;
+    cv::cvtColor(edge, dst, cv::COLOR_GRAY2BGR);
+
+    // Step 3: Filter lines based on angle and position
+    for(size_t i = 0; i < lines.size(); i++) {
+        float r = lines[i][0], t = lines[i][1];
+        // Filter for near-vertical or near-horizontal lines
+        if (std::abs(t) < CV_PI / 18 || std::abs(t - CV_PI / 2) < CV_PI / 18) {
+            double cos_t = cos(t), sin_t = sin(t);
+            double x0 = r * cos_t, y0 = r * sin_t;
+            double alpha = 1000;
+
+            cv::Point pt1(cvRound(x0 + alpha * (-sin_t)), cvRound(y0 + alpha * cos_t));
+            cv::Point pt2(cvRound(x0 - alpha * (-sin_t)), cvRound(y0 - alpha * cos_t));
+            line(dst, pt1, pt2, cv::Scalar(0, 0, 255), 2, cv::LINE_AA);
+        }
+    }
+
+    return dst;
+}
+
+
 void EdgeBLE::onMouse(int event, int x, int y, int flags, void *userdata)
 {
     if (event == cv::EVENT_LBUTTONDOWN)
@@ -229,6 +299,87 @@ void EdgeBLE::onMouse(int event, int x, int y, int flags, void *userdata)
     }
 }
 
+cv::Mat EdgeBLE::process_image_all_advanced(const cv::Mat &img)
+{
+    if (img.empty()) {
+        std::cerr << "Error: Input image is empty!" << std::endl;
+        return cv::Mat();
+    }
+
+    // Step 1: 그레이스케일 변환 및 대비 조정
+    cv::Mat gray, enhanced;
+    cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+
+    // CLAHE(Contrast Limited Adaptive Histogram Equalization) 적용
+    cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(2.0, cv::Size(8, 8));
+    clahe->apply(gray, enhanced);
+
+    // Step 2: 가우시안 블러 적용 (노이즈 제거)
+    cv::Mat blurred;
+    cv::GaussianBlur(enhanced, blurred, cv::Size(5, 5), 1.5);
+
+    // Step 3: Canny Edge Detection 수행
+    cv::Mat edges;
+    cv::Canny(blurred, edges, 50, 150);
+
+    // Step 4: Hough Line Transform 적용
+    std::vector<cv::Vec2f> lines;
+    cv::Mat lineImage = img.clone();
+    cv::HoughLines(edges, lines, 1, CV_PI / 180, 100);
+
+    for (size_t i = 0; i < lines.size(); i++) {
+        float rho = lines[i][0], theta = lines[i][1];
+        double a = cos(theta), b = sin(theta);
+        double x0 = a * rho, y0 = b * rho;
+        cv::Point pt1(cvRound(x0 + 1000 * (-b)), cvRound(y0 + 1000 * (a)));
+        cv::Point pt2(cvRound(x0 - 1000 * (-b)), cvRound(y0 - 1000 * (a)));
+        cv::line(lineImage, pt1, pt2, cv::Scalar(0, 0, 255), 2, cv::LINE_AA);
+    }
+
+    // Step 5: 형태학적 연산을 활용한 노이즈 제거
+    cv::Mat morphKernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+    cv::Mat morphProcessed;
+    cv::morphologyEx(edges, morphProcessed, cv::MORPH_CLOSE, morphKernel);
+
+    // Step 6: 윤곽선 검출 및 강조
+    std::vector<std::vector<cv::Point>> contours;
+    std::vector<cv::Vec4i> hierarchy;
+    cv::Mat contourImage = img.clone();
+    cv::findContours(morphProcessed, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    cv::drawContours(contourImage, contours, -1, cv::Scalar(0, 255, 0), 2);
+
+    // Step 7: 모든 이미지 크기 및 타입 맞추기
+    cv::Size targetSize(img.cols, img.rows);
+
+    std::vector<cv::Mat> images = {enhanced, edges, lineImage};
+
+    for (auto &mat : images) {
+        // 1. 크기 통일
+        if (mat.size() != targetSize) {
+            cv::resize(mat, mat, targetSize);
+        }
+
+        // 2. 채널 개수 통일
+        if (mat.channels() == 1) {
+            cv::cvtColor(mat, mat, cv::COLOR_GRAY2BGR);
+        } else if (mat.channels() != 3) {
+            std::cerr << "Unexpected channel count: " << mat.channels() << std::endl;
+            return cv::Mat();
+        }
+
+        // 3. 데이터 타입 통일 (CV_8UC3)
+        if (mat.type() != CV_8UC3) {
+            mat.convertTo(mat, CV_8UC3);
+        }
+    }
+
+    // Step 8: 최종 이미지 병합
+    cv::Mat finalResult;
+    cv::hconcat(images, finalResult);
+
+    return finalResult;
+}
+
 void EdgeBLE::sendImageToServer()
 {
     std::lock_guard<std::mutex> lock(bleMutex);
@@ -241,16 +392,15 @@ void EdgeBLE::sendImageToServer()
 
     try
     {
-        // Boost.Asio는 쓰레드와 명시적 Locking을 기반으로 한 동시성 모델의 사용을 프로그램에게 요구하지 않으면서 느린 I/O operation을 관리하는 도구를 제공.
-        boost::asio::io_context io_context; // 비동기 작업의 실행을 조정하는 핵심 객체(하단 resolver를 통해 서버 주소와 포트를 조회)
+        boost::asio::io_context io_context;
 
-        // 서버 주소 및 포트 설정(resolver- 호스트이름 확인, 리졸버)
-        tcp::resolver resolver(io_context); // DNS 조회를 통해 호스트 이름을 IP 주소로 변환하는 역할 수행
-        auto endpoints = resolver.resolve(server_ip_, std::to_string(server_port_));    // 조회되고 난 이후에는 endpoint
+        // 서버 주소 및 포트 설정
+        tcp::resolver resolver(io_context);
+        auto endpoints = resolver.resolve(server_ip_, std::to_string(server_port_));
         auto socket = std::make_shared<tcp::socket>(io_context);
-        boost::asio::connect(*socket, endpoints);   // 순서대로 각 endpoints에 연결하여 socket 연결을 수립
+        boost::asio::connect(*socket, endpoints);
 
-        cv::Mat image = cv::imread("sample2.jpg", cv::IMREAD_GRAYSCALE);
+        cv::Mat image = cv::imread("building.jpg");
         if (image.empty())
         {
             AZLOGDE("Failed to load image from sample.jpg", "error_log.txt", scanResults);
@@ -258,39 +408,43 @@ void EdgeBLE::sendImageToServer()
             return;
         }
 
-        EdgeBLE edge;
-        cv::Mat transformedImage = edge.event_lbuttondown(image);
+        // 새로운 이미지 처리 로직 적용
+        cv::Mat processedImage = process_image_all_advanced(image);
 
-        if (transformedImage.empty())
-        {
-            std::cerr << "Transformed image is empty!" << std::endl;
+        // 1. 이미지가 비어 있으면 오류 출력 후 종료
+        if (processedImage.empty()) {
+            AZLOGDE("Error: Processed image is empty", "error_log.txt", scanResults);
+            std::cerr << "Error: Processed image is empty!" << std::endl;
             return;
         }
 
+        // 2. 정확한 타입 변환 수행
+        cv::Mat finalImage;
+        if (processedImage.channels() == 1) {
+            cv::cvtColor(processedImage, finalImage, cv::COLOR_GRAY2BGR);
+        } else if (processedImage.channels() == 3) {
+            finalImage = processedImage.clone();
+        } else {
+            AZLOGDE("Unexpected number of channels: %d", "error_log.txt", scanResults, processedImage.channels());
+            std::cerr << "Unexpected number of channels: " << processedImage.channels() << std::endl;
+            return;
+        }
+
+        // 3. 최종 이미지를 서버로 전송
         std::vector<uchar> buffer;
-        // cv::imencode(".png", filter_embossing(image), buffer);
-        // cv::imencode(".png", blurring_affine_Transform(image), buffer);
-        cv::imencode(".png", transformedImage, buffer);
+        cv::imencode(".jpg", finalImage, buffer);
         std::string image_data(buffer.begin(), buffer.end());
 
-        // 이미지 데이터를 네트워크로 전송하기 위해 먼저 데이터 크기를 계산
-        uint32_t data_size = static_cast<uint32_t>(image_data.size());  // image_data.size()는 std::string 타입의 크기를 반환하며, 전송할 데이터의 총 바이트 수를 나타냄.
-        
-        // 데이터 크기를 네트워크 바이트 오더(빅 엔디언)로 변환
-        // 네트워크 바이트 오더 → 호스트 바이트 오더로 변환
-        // 네트워크 통신 표준상 데이터를 송수신할 때 항상 빅 엔디언을 사용하도록 규정됨
-        // 인터넷 프로토콜(IP), TCP, UDP 등의 프로토콜이 정의된 RFC1700과 같은 표준 문서에 명시되어있음.
-        // 빅 엔디언 : Most Significant Byte, MSB부터 순서대로 정렬한다.
-        // 좌측에서 우측으로 가는 순서와 유사하여 직관적(0x12345678 -> [12][34][56][78]
+        uint32_t data_size = static_cast<uint32_t>(image_data.size());
         uint32_t data_size_network_order = htonl(data_size);
 
         AZLOGDI("Sending image size: %d bytes", "debug_log.txt", scanResults, data_size);
 
-        // 변환된 데이터 크기를 네트워크 소켓으로 전송
         boost::asio::write(*socket, boost::asio::buffer(&data_size_network_order, sizeof(data_size_network_order)));
         boost::asio::write(*socket, boost::asio::buffer(image_data));
 
         AZLOGDI("Image sent successfully.", "debug_log.txt", scanResults);
+
     }
     catch (const std::exception &e)
     {
