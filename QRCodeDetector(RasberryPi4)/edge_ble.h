@@ -28,6 +28,9 @@ public:
     cv::Mat blurring_mean(const cv::Mat &img);
     cv::Mat blurring_affine_Transform(const cv::Mat &img);
     cv::Mat event_lbuttondown(const cv::Mat &img);
+    cv::Mat hough_lines(const cv::Mat &img);
+    cv::Mat hough_lines_optimized(const cv::Mat &img);
+    cv::Mat process_image_all_advanced(const cv::Mat &img);
 
 private:
     void scanBLEDevices();
